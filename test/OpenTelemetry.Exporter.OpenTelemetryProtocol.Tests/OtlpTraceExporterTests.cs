@@ -608,7 +608,8 @@ public class OtlpTraceExporterTests
         void RunTest(SdkLimitOptions sdkOptions, Batch<Activity> batch)
         {
             var buffer = new byte[50];
-            var writePosition = ProtobufOtlpTraceSerializer.WriteTraceData(ref buffer, 0, sdkOptions, ResourceBuilder.CreateEmpty().Build(), batch);
+            using var otlpTraceExporter = new OtlpTraceExporter(new(), sdkOptions, new());
+            var writePosition = otlpTraceExporter.WriteTraceData(ref buffer, 0, batch, ResourceBuilder.CreateEmpty().Build());
             using var stream = new MemoryStream(buffer, 0, writePosition);
             var tracesData = OtlpTrace.TracesData.Parser.ParseFrom(stream);
             var request = new OtlpCollector.ExportTraceServiceRequest();
@@ -1010,7 +1011,10 @@ public class OtlpTraceExporterTests
     private static OtlpCollector.ExportTraceServiceRequest CreateTraceExportRequest(SdkLimitOptions sdkOptions, in Batch<Activity> batch, Resource resource)
     {
         var buffer = new byte[4096];
-        var writePosition = ProtobufOtlpTraceSerializer.WriteTraceData(ref buffer, 0, sdkOptions, resource, batch);
+        using var otlpTraceExporter = new OtlpTraceExporter(new(), sdkOptions, new());
+        var processor = new SimpleActivityExportProcessor(otlpTraceExporter);
+
+        var writePosition = otlpTraceExporter.WriteTraceData(ref buffer, 0, batch, resource);
         using var stream = new MemoryStream(buffer, 0, writePosition);
         var tracesData = OtlpTrace.TracesData.Parser.ParseFrom(stream);
         var request = new OtlpCollector.ExportTraceServiceRequest();

@@ -240,7 +240,8 @@ public class OtlpArrayTagWriterTests : IDisposable
         void RunTest(SdkLimitOptions sdkOptions, Batch<Activity> batch)
         {
             var buffer = new byte[4096];
-            var writePosition = ProtobufOtlpTraceSerializer.WriteTraceData(ref buffer, 0, sdkOptions, ResourceBuilder.CreateEmpty().Build(), batch);
+            using var otlpTraceExporter = new OtlpTraceExporter(new(), sdkOptions, new());
+            var writePosition = otlpTraceExporter.WriteTraceData(ref buffer, 0, batch, ResourceBuilder.CreateEmpty().Build());
             using var stream = new MemoryStream(buffer, 0, writePosition);
             var tracesData = OtlpTrace.TracesData.Parser.ParseFrom(stream);
             var request = new OtlpCollector.ExportTraceServiceRequest();

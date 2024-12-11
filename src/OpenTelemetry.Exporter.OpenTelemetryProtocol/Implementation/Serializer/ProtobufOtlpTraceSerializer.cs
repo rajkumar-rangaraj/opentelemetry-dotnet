@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 using System.Diagnostics;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 namespace OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.Serializer;
@@ -15,39 +16,11 @@ internal static class ProtobufOtlpTraceSerializer
     private const int TraceIdSize = 16;
     private const int SpanIdSize = 8;
 
-    private static readonly Stack<List<Activity>> ActivityListPool = [];
-    private static readonly Dictionary<string, List<Activity>> ScopeTracesList = [];
-
-    internal static int WriteTraceData(ref byte[] buffer, int writePosition, SdkLimitOptions sdkLimitOptions, Resources.Resource? resource, in Batch<Activity> batch)
-    {
-        writePosition = ProtobufSerializer.WriteTag(buffer, writePosition, ProtobufOtlpTraceFieldNumberConstants.TracesData_Resource_Spans, ProtobufWireType.LEN);
-        int resourceSpansScopeSpansLengthPosition = writePosition;
-        writePosition += ReserveSizeForLength;
-
-        foreach (var activity in batch)
-        {
-            var sourceName = activity.Source.Name;
-            if (!ScopeTracesList.TryGetValue(sourceName, out var activities))
-            {
-                activities = ActivityListPool.Count > 0 ? ActivityListPool.Pop() : [];
-                ScopeTracesList[sourceName] = activities;
-            }
-
-            activities.Add(activity);
-        }
-
-        writePosition = TryWriteResourceSpans(ref buffer, writePosition, sdkLimitOptions, resource);
-        ReturnActivityListToPool();
-        ProtobufSerializer.WriteReservedLength(buffer, resourceSpansScopeSpansLengthPosition, writePosition - (resourceSpansScopeSpansLengthPosition + ReserveSizeForLength));
-
-        return writePosition;
-    }
-
-    internal static int TryWriteResourceSpans(ref byte[] buffer, int writePosition, SdkLimitOptions sdkLimitOptions, Resources.Resource? resource)
+    internal static int TryWriteResourceSpans(ref byte[] buffer, int writePosition, Dictionary<string, List<Activity>> scopeTracesList, SdkLimitOptions sdkLimitOptions, Resource? resource)
     {
         try
         {
-            writePosition = WriteResourceSpans(buffer, writePosition, sdkLimitOptions, resource);
+            writePosition = WriteResourceSpans(buffer, writePosition, scopeTracesList, sdkLimitOptions, resource);
         }
         catch (Exception ex) when (ex is IndexOutOfRangeException || ex is ArgumentException)
         {
@@ -61,39 +34,25 @@ internal static class ProtobufOtlpTraceSerializer
             // The recursion depth is limited to a maximum of 7 calls, as the buffer size starts at ~732 KB
             // and doubles until it reaches the maximum size of 100 MB. This ensures the recursion remains safe
             // and avoids stack overflow.
-            return TryWriteResourceSpans(ref buffer, writePosition, sdkLimitOptions, resource);
+            return TryWriteResourceSpans(ref buffer, writePosition, scopeTracesList, sdkLimitOptions, resource);
         }
 
         return writePosition;
     }
 
-    internal static void ReturnActivityListToPool()
-    {
-        if (ScopeTracesList.Count != 0)
-        {
-            foreach (var entry in ScopeTracesList)
-            {
-                entry.Value.Clear();
-                ActivityListPool.Push(entry.Value);
-            }
-
-            ScopeTracesList.Clear();
-        }
-    }
-
-    internal static int WriteResourceSpans(byte[] buffer, int writePosition, SdkLimitOptions sdkLimitOptions, Resources.Resource? resource)
+    internal static int WriteResourceSpans(byte[] buffer, int writePosition, Dictionary<string, List<Activity>> scopeTracesList, SdkLimitOptions sdkLimitOptions, Resource? resource)
     {
         writePosition = ProtobufOtlpResourceSerializer.WriteResource(buffer, writePosition, resource);
-        writePosition = WriteScopeSpans(buffer, writePosition, sdkLimitOptions);
+        writePosition = WriteScopeSpans(buffer, writePosition, scopeTracesList, sdkLimitOptions);
 
         return writePosition;
     }
 
-    internal static int WriteScopeSpans(byte[] buffer, int writePosition, SdkLimitOptions sdkLimitOptions)
+    internal static int WriteScopeSpans(byte[] buffer, int writePosition, Dictionary<string, List<Activity>> scopeTracesList, SdkLimitOptions sdkLimitOptions)
     {
-        if (ScopeTracesList != null)
+        if (scopeTracesList != null)
         {
-            foreach (KeyValuePair<string, List<Activity>> entry in ScopeTracesList)
+            foreach (KeyValuePair<string, List<Activity>> entry in scopeTracesList)
             {
                 writePosition = ProtobufSerializer.WriteTag(buffer, writePosition, ProtobufOtlpTraceFieldNumberConstants.ResourceSpans_Scope_Spans, ProtobufWireType.LEN);
                 int resourceSpansScopeSpansLengthPosition = writePosition;

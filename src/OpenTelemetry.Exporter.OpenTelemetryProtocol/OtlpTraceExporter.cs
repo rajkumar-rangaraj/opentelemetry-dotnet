@@ -16,10 +16,14 @@ namespace OpenTelemetry.Exporter;
 /// </summary>
 public class OtlpTraceExporter : BaseExporter<Activity>
 {
+    private const int ReserveSizeForLength = 4;
     private const int GrpcStartWritePosition = 5;
     private readonly SdkLimitOptions sdkLimitOptions;
     private readonly OtlpExporterTransmissionHandler transmissionHandler;
     private readonly int startWritePosition;
+
+    private readonly Stack<List<Activity>> activityListPool = [];
+    private readonly Dictionary<string, List<Activity>> scopeTracesList = [];
 
     private Resource? resource;
 
@@ -68,7 +72,7 @@ public class OtlpTraceExporter : BaseExporter<Activity>
 
         try
         {
-            int writePosition = ProtobufOtlpTraceSerializer.WriteTraceData(ref this.buffer, this.startWritePosition, this.sdkLimitOptions, this.Resource, activityBatch);
+            int writePosition = this.WriteTraceData(ref this.buffer, this.startWritePosition, activityBatch, this.Resource);
 
             if (this.startWritePosition == GrpcStartWritePosition)
             {
@@ -93,6 +97,45 @@ public class OtlpTraceExporter : BaseExporter<Activity>
         }
 
         return ExportResult.Success;
+    }
+
+    internal int WriteTraceData(ref byte[] buffer, int writePosition, in Batch<Activity> batch, Resource resource)
+    {
+        writePosition = ProtobufSerializer.WriteTag(buffer, writePosition, ProtobufOtlpTraceFieldNumberConstants.TracesData_Resource_Spans, ProtobufWireType.LEN);
+        int resourceSpansScopeSpansLengthPosition = writePosition;
+        writePosition += ReserveSizeForLength;
+
+        foreach (var activity in batch)
+        {
+            var sourceName = activity.Source.Name;
+            if (!this.scopeTracesList.TryGetValue(sourceName, out var activities))
+            {
+                activities = this.activityListPool.Count > 0 ? this.activityListPool.Pop() : [];
+                this.scopeTracesList[sourceName] = activities;
+            }
+
+            activities.Add(activity);
+        }
+
+        writePosition = ProtobufOtlpTraceSerializer.TryWriteResourceSpans(ref buffer, writePosition, this.scopeTracesList, this.sdkLimitOptions, resource);
+        this.ReturnActivityListToPool();
+        ProtobufSerializer.WriteReservedLength(buffer, resourceSpansScopeSpansLengthPosition, writePosition - (resourceSpansScopeSpansLengthPosition + ReserveSizeForLength));
+
+        return writePosition;
+    }
+
+    internal void ReturnActivityListToPool()
+    {
+        if (this.scopeTracesList.Count != 0)
+        {
+            foreach (var entry in this.scopeTracesList)
+            {
+                entry.Value.Clear();
+                this.activityListPool.Push(entry.Value);
+            }
+
+            this.scopeTracesList.Clear();
+        }
     }
 
     /// <inheritdoc />

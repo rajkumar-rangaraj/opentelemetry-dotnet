@@ -7,7 +7,6 @@ using System.Net.Http;
 #endif
 using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation;
 using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.ExportClient;
-using OpenTelemetry.Exporter.OpenTelemetryProtocol.Implementation.Serializer;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Xunit;
@@ -181,7 +180,8 @@ public class OtlpHttpTraceExportClientTests
     private static (byte[] Buffer, int ContentLength) CreateTraceExportRequest(SdkLimitOptions sdkOptions, in Batch<Activity> batch, Resource resource)
     {
         var buffer = new byte[4096];
-        var writePosition = ProtobufOtlpTraceSerializer.WriteTraceData(ref buffer, 0, sdkOptions, resource, batch);
+        using var otlpTraceExporter = new OtlpTraceExporter(new(), sdkOptions, new());
+        var writePosition = otlpTraceExporter.WriteTraceData(ref buffer, 0, batch, resource);
         return (buffer, writePosition);
     }
 }
