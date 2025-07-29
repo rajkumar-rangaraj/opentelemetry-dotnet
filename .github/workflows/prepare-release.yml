@@ -49,17 +49,23 @@ jobs:
 
     - name: Create GitHub Pull Request to prepare release
       shell: pwsh
+      env:
+        SENDER_LOGIN: ${{ github.event.sender.login }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+        VERSION: ${{ inputs.version }}
+        GIT_USER_NAME: ${{ needs.automation.outputs.username }}
+        GIT_USER_EMAIL: ${{ needs.automation.outputs.email }}
       run: |
         Import-Module .\build\scripts\prepare-release.psm1
 
         CreatePullRequestToUpdateChangelogsAndPublicApis `
-          -gitRepository '${{ github.repository }}' `
-          -minVerTagPrefix '${{ inputs.tag-prefix }}' `
-          -version '${{ inputs.version }}' `
-          -requestedByUserName '${{ github.event.sender.login }}' `
-          -targetBranch '${{ github.ref_name }}' `
-          -gitUserName '${{ needs.automation.outputs.username }}' `
-          -gitUserEmail '${{ needs.automation.outputs.email }}'
+          -gitRepository $env:GITHUB_REPOSITORY `
+          -minVerTagPrefix $env:TAG_PREFIX `
+          -version $env:VERSION `
+          -requestedByUserName $env:SENDER_LOGIN `
+          -targetBranch $env:GITHUB_REF_NAME `
+          -gitUserName $env:GIT_USER_NAME `
+          -gitUserEmail $env:GIT_USER_EMAIL
 
   lock-pr-and-post-notice-to-create-release-tag:
     runs-on: ubuntu-22.04
@@ -85,13 +91,16 @@ jobs:
 
     - name: Lock GitHub Pull Request to prepare release
       shell: pwsh
+      env:
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        BOT_USER_NAME: ${{ needs.automation.outputs.username }}
       run: |
         Import-Module .\build\scripts\prepare-release.psm1
 
         LockPullRequestAndPostNoticeToCreateReleaseTag `
-          -gitRepository '${{ github.repository }}' `
-          -pullRequestNumber '${{ github.event.pull_request.number }}' `
-          -botUserName '${{ needs.automation.outputs.username }}'
+          -gitRepository $env:GITHUB_REPOSITORY `
+          -pullRequestNumber $env:PR_NUMBER `
+          -botUserName $env:BOT_USER_NAME
 
   create-release-tag-pr-post-notice:
     runs-on: ubuntu-22.04
@@ -122,15 +131,20 @@ jobs:
     - name: Create release tag
       id: create-tag
       shell: pwsh
+      env:
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        BOT_USER_NAME: ${{ needs.automation.outputs.username }}
+        GIT_USER_NAME: ${{ needs.automation.outputs.username }}
+        GIT_USER_EMAIL: ${{ needs.automation.outputs.email }}
       run: |
         Import-Module .\build\scripts\prepare-release.psm1
 
         CreateReleaseTagAndPostNoticeOnPullRequest `
-          -gitRepository '${{ github.repository }}' `
-          -pullRequestNumber '${{ github.event.issue.number }}' `
-          -botUserName '${{ needs.automation.outputs.username }}' `
-          -gitUserName '${{ needs.automation.outputs.username }}' `
-          -gitUserEmail '${{ needs.automation.outputs.email }}'
+          -gitRepository $env:GITHUB_REPOSITORY `
+          -pullRequestNumber $env:ISSUE_NUMBER `
+          -botUserName $env:BOT_USER_NAME `
+          -gitUserName $env:GIT_USER_NAME `
+          -gitUserEmail $env:GIT_USER_EMAIL
 
   update-changelog-release-dates-on-prepare-pr-post-notice:
     runs-on: ubuntu-22.04
@@ -160,16 +174,22 @@ jobs:
 
     - name: Update release date
       shell: pwsh
+      env:
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        BOT_USER_NAME: ${{ needs.automation.outputs.username }}
+        COMMENT_USER_NAME: ${{ github.event.comment.user.login }}
+        GIT_USER_NAME: ${{ needs.automation.outputs.username }}
+        GIT_USER_EMAIL: ${{ needs.automation.outputs.email }}
       run: |
         Import-Module .\build\scripts\prepare-release.psm1
 
         UpdateChangelogReleaseDatesAndPostNoticeOnPullRequest `
-          -gitRepository '${{ github.repository }}' `
-          -pullRequestNumber '${{ github.event.issue.number }}' `
-          -botUserName '${{ needs.automation.outputs.username }}' `
-          -commentUserName '${{ github.event.comment.user.login }}' `
-          -gitUserName '${{ needs.automation.outputs.username }}' `
-          -gitUserEmail '${{ needs.automation.outputs.email }}'
+          -gitRepository $env:GITHUB_REPOSITORY `
+          -pullRequestNumber $env:ISSUE_NUMBER `
+          -botUserName $env:BOT_USER_NAME `
+          -commentUserName $env:COMMENT_USER_NAME `
+          -gitUserName $env:GIT_USER_NAME `
+          -gitUserEmail $env:GIT_USER_EMAIL
 
   update-releasenotes-on-prepare-pr-post-notice:
     runs-on: ubuntu-22.04
@@ -200,15 +220,20 @@ jobs:
     - name: Update release notes
       env:
         COMMENT_BODY: ${{ github.event.comment.body }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        BOT_USER_NAME: ${{ needs.automation.outputs.username }}
+        COMMENT_USER_NAME: ${{ github.event.comment.user.login }}
+        GIT_USER_NAME: ${{ needs.automation.outputs.username }}
+        GIT_USER_EMAIL: ${{ needs.automation.outputs.email }}
       shell: pwsh
       run: |
         Import-Module .\build\scripts\prepare-release.psm1
 
         UpdateReleaseNotesAndPostNoticeOnPullRequest `
-          -gitRepository '${{ github.repository }}' `
-          -pullRequestNumber '${{ github.event.issue.number }}' `
-          -botUserName '${{ needs.automation.outputs.username }}' `
-          -commentUserName '${{ github.event.comment.user.login }}' `
-          -commentBody $Env:COMMENT_BODY `
-          -gitUserName '${{ needs.automation.outputs.username }}' `
-          -gitUserEmail '${{ needs.automation.outputs.email }}'
+          -gitRepository $env:GITHUB_REPOSITORY `
+          -pullRequestNumber $env:ISSUE_NUMBER `
+          -botUserName $env:BOT_USER_NAME `
+          -commentUserName $env:COMMENT_USER_NAME `
+          -commentBody $env:COMMENT_BODY `
+          -gitUserName $env:GIT_USER_NAME `
+          -gitUserEmail $env:GIT_USER_EMAIL

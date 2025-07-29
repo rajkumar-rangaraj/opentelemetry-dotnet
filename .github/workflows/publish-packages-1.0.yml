@@ -57,7 +57,7 @@ jobs:
       run: dotnet restore ./build/OpenTelemetry.proj -p:RunningDotNetPack=true
 
     - name: dotnet build
-      run: dotnet build ./build/OpenTelemetry.proj --configuration Release --no-restore -p:Deterministic=true -p:BuildNumber=${{ github.run_number }} -p:RunningDotNetPack=true
+      run: dotnet build ./build/OpenTelemetry.proj --configuration Release --no-restore -p:Deterministic=true -p:BuildNumber=$env:GITHUB_RUN_NUMBER -p:RunningDotNetPack=true
 
     - name: Sign DLLs with Cosign Keyless
       shell: pwsh
@@ -76,7 +76,9 @@ jobs:
         }
 
     - name: dotnet pack
-      run: dotnet pack ./build/OpenTelemetry.proj --configuration Release --no-restore --no-build -p:PackTag=${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      env:
+        PACK_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      run: dotnet pack ./build/OpenTelemetry.proj --configuration Release --no-restore --no-build -p:PackTag=$env:PACK_TAG
 
     - name: Publish Artifacts
       id: upload-artifacts
@@ -112,35 +114,42 @@ jobs:
         token: ${{ secrets[needs.automation.outputs.token-secret-name] }}
 
     - name: Download Artifacts
+      env:
+        ARTIFACT_ID: ${{ needs.build-pack-publish.outputs.artifact-id }}
       run: |
         curl \
           -H "Accept: application/vnd.github+json" \
-          -H "Authorization: token ${{ github.token }}" \
+          -H "Authorization: token $env:GITHUB_TOKEN" \
           -L \
-          -o '${{ github.workspace }}/artifacts/${{ github.ref_name }}-packages.zip' \
+          -o "$env:GITHUB_WORKSPACE/artifacts/$env:GITHUB_REF_NAME-packages.zip" \
           --create-dirs \
-          "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${{ needs.build-pack-publish.outputs.artifact-id }}/zip"
+          "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:ARTIFACT_ID/zip"
 
     - name: Create GitHub Release draft
       shell: pwsh
+      env:
+        RELEASE_FILES: ${{ github.workspace }}/artifacts/${{ github.ref_name }}-packages.zip#Packages
       run: |
         Import-Module .\build\scripts\post-release.psm1
 
         CreateDraftRelease `
-          -gitRepository '${{ github.repository }}' `
-          -tag '${{ github.ref_name }}' `
-          -releaseFiles '${{ github.workspace }}/artifacts/${{ github.ref_name }}-packages.zip#Packages'
+          -gitRepository $env:GITHUB_REPOSITORY `
+          -tag $env:GITHUB_REF_NAME `
+          -releaseFiles $env:RELEASE_FILES
 
     - name: Post notice when packages are ready
       shell: pwsh
+      env:
+        PACKAGES_URL: ${{ needs.build-pack-publish.outputs.artifact-url }}
+        BOT_USER_NAME: ${{ needs.automation.outputs.username }}
       run: |
         Import-Module .\build\scripts\post-release.psm1
 
         TryPostPackagesReadyNoticeOnPrepareReleasePullRequest `
-          -gitRepository '${{ github.repository }}' `
-          -tag '${{ github.ref_name }}' `
-          -tagSha '${{ github.sha }}' `
-          -packagesUrl '${{ needs.build-pack-publish.outputs.artifact-url }}' `
-          -botUserName '${{ needs.automation.outputs.username }}'
+          -gitRepository $env:GITHUB_REPOSITORY `
+          -tag $env:GITHUB_REF_NAME `
+          -tagSha $env:GITHUB_SHA `
+          -packagesUrl $env:PACKAGES_URL `
+          -botUserName $env:BOT_USER_NAME
 
 
