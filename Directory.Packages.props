@@ -11,6 +11,7 @@
       See https://github.com/open-telemetry/opentelemetry-dotnet/issues/5973 for more details.
   -->
   <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.2" />
     <!-- Default to latest versions for all TFMs -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="[10.0.0,)" />
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.Abstractions" Version="[10.0.0,)" />
